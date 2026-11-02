@@ -1,0 +1,65 @@
+
+/* ChatGPT-style code blocks */
+
+.code-block {
+  margin: 16px 0;
+  border: 1px solid #343434;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #171717;
+  width: 100%;
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #252525;
+  border-bottom: 1px solid #383838;
+}
+
+.code-language {
+  color: #e5e5e5;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.copy-code-button {
+  background: transparent;
+  color: #d4d4d4;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.copy-code-button:hover {
+  background: #3a3a3a;
+  color: white;
+}
+
+.code-block pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.inline-code {
+  background: #303030;
+  color: #f0abfc;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.answer {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.answer p {
+  line-height: 1.6;
+}

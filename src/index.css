@@ -1,0 +1,44 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #fafafa;
+  color: #111;
+}
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px;
+}
+textarea,
+input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  margin: 6px 0;
+  font-size: 16px;
+}
+button {
+  padding: 10px 16px;
+  margin: 6px 6px 6px 0;
+  font-size: 16px;
+  cursor: pointer;
+}
+.tabs button.on {
+  background: #111;
+  color: #fff;
+}
+.mic {
+  display: block;
+}
+.interim {
+  color: #888;
+  font-style: italic;
+}
+.error {
+  color: #c00;
+}
+.answer {
+  font-size: 20px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
