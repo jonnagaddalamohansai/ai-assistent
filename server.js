@@ -1,16 +1,34 @@
 
 import express from "express";
 import { createServer } from "node:http";
-import WebSocket, { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import handler from "./api/answer.js";
 
 const app = express();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 app.use(express.json({ limit: "16mb" }));
+
+// API endpoint
 app.all("/api/answer", (req, res) => handler(req, res));
+
+// Health check
+app.get("/health", (req, res) => {
+  res.json({ status: "OK" });
+});
+
+// Serve React frontend
+const distPath = path.join(__dirname, "dist");
+app.use(express.static(distPath));
 
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
+// Live audio WebSocket
 server.on("upgrade", (request, socket, head) => {
   const pathname = new URL(request.url, "http://localhost").pathname;
 
@@ -66,9 +84,11 @@ wss.on("connection", (client) => {
 
     if (message.setupComplete) {
       ready = true;
+
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({ type: "ready" }));
       }
+
       return;
     }
 
@@ -94,6 +114,7 @@ wss.on("connection", (client) => {
 
     if (message.error) {
       console.error("Gemini Live error:", message.error);
+
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({
           type: "error",
@@ -105,6 +126,7 @@ wss.on("connection", (client) => {
 
   upstream.on("error", (error) => {
     console.error("Gemini WebSocket error:", error.message);
+
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({
         type: "error",
@@ -145,6 +167,7 @@ wss.on("connection", (client) => {
 
   client.on("close", closeConnections);
   client.on("error", closeConnections);
+
   upstream.on("close", () => {
     if (client.readyState === WebSocket.OPEN) {
       client.close();
@@ -152,7 +175,14 @@ wss.on("connection", (client) => {
   });
 });
 
-server.listen(3001, () => {
-  console.log("API running at http://localhost:3001");
-  console.log("Live audio WebSocket: ws://localhost:3001/live-audio");
+// React SPA fallback (Express 5 compatible)
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(distPath, "index.html"));
+});
+
+// Render assigns the PORT environment variable
+const PORT = process.env.PORT || 3001;
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`AI Coach server running on port ${PORT}`);
 });
