@@ -11,7 +11,7 @@ GENERAL ANSWERING RULES:
 - Use natural, professional, conversational English.
 - Answer the actual question directly.
 - Never generate questions instead of answers in answer mode.
-- Keep answers concise but technically complete.
+- Keep answers concise but technically complete. For normal interview questions, aim for a spoken answer of 60–100 words unless the question needs more detail.
 - Do not add unnecessary introductions or conclusions.
 - Do not say "Certainly", "Sure", or "Here is the answer".
 - Never invent candidate experience, projects, clients, or responsibilities.
@@ -184,7 +184,7 @@ async function generateAnswer(prompt, mode) {
       generationConfig: {
         temperature: 0.2,
         topP: 0.85,
-        maxOutputTokens: mode === "answer" ? 800 : 400
+        maxOutputTokens: mode === "answer" ? 550 : 350
       }
     }),
     signal: AbortSignal.timeout(45000)
