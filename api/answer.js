@@ -241,7 +241,7 @@ async function streamAnswer(prompt, mode, req, res) {
   if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
 
   const controller = new AbortController();
-  req.on("close", () => controller.abort());
+  res.on("close", () => { if (!res.writableEnded) controller.abort(); });
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?alt=sse`;
   const upstream = await fetch(url, {
