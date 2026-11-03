@@ -143,14 +143,12 @@ export default function App() {
     setAnswer("");
 
     await run(async () => {
-      const result = await callApi({
-        mode: "answer",
-        question: cleanQuestion,
-        profile,
-        role,
-      });
+      const result = await callApi(
+        { mode: "answer", question: cleanQuestion, profile, role },
+        { onChunk: (chunk) => setAnswer((previous) => previous + chunk) }
+      );
 
-      setAnswer(result);
+      if (!result) setAnswer("No answer was generated. Please try again.");
     });
   };
 
@@ -300,12 +298,11 @@ export default function App() {
         <h2>Voice Coach — Mobile View</h2>
         <p>Session: <strong>{sessionCode}</strong> · {syncStatus}</p>
         <button type="button" onClick={leaveInterviewSession}>Leave session</button>
-        <h4>Interviewer transcript</h4>
-        <pre className="answer">{transcript || "Waiting for interviewer speech..."}</pre>
-        <h4>Latest interviewer question</h4>
-        <div className="answer">{question || "No question received yet."}</div>
-        <h4 ref={answerSectionRef}>AI suggested answer</h4>
-        <div className="answer">{answer ? <MarkdownAnswer>{answer}</MarkdownAnswer> : "Waiting for the AI answer..."}</div>
+        <h2 ref={answerSectionRef}>Suggested answer</h2>
+        <div className="answer" aria-live="polite">
+          {answer ? <MarkdownAnswer>{answer}</MarkdownAnswer> : "Listening for the next question..."}
+          {loading && <p>Preparing the rest of the answer...</p>}
+        </div>
       </div>
     );
   }
@@ -406,14 +403,15 @@ export default function App() {
 
           <h4 ref={answerSectionRef}>AI suggested answer</h4>
 
-          <div className="answer">
-            {loading ? (
-              "Generating your answer..."
-            ) : answer ? (
+          <div className="answer" aria-live="polite">
+            {answer ? (
               <MarkdownAnswer>{answer}</MarkdownAnswer>
+            ) : loading ? (
+              "Starting your answer..."
             ) : (
               "Your answer will appear here automatically."
             )}
+            {loading && answer && <p>Preparing the rest of the answer...</p>}
           </div>
 
           <input
