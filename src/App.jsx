@@ -111,6 +111,14 @@ export default function App() {
   const [sessionMode, setSessionMode] = useState("");
   const [syncStatus, setSyncStatus] = useState("Not connected");
   const syncSocketRef = useRef(null);
+  const answerSectionRef = useRef(null);
+
+  // Bring the newest suggested answer into view automatically.
+  useEffect(() => {
+    if (question || answer) {
+      answerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [question, answer]);
 
   const run = async (fn) => {
     setError("");
@@ -296,7 +304,7 @@ export default function App() {
         <pre className="answer">{transcript || "Waiting for interviewer speech..."}</pre>
         <h4>Latest interviewer question</h4>
         <div className="answer">{question || "No question received yet."}</div>
-        <h4>AI suggested answer</h4>
+        <h4 ref={answerSectionRef}>AI suggested answer</h4>
         <div className="answer">{answer ? <MarkdownAnswer>{answer}</MarkdownAnswer> : "Waiting for the AI answer..."}</div>
       </div>
     );
@@ -396,7 +404,7 @@ export default function App() {
 
           <p>{question || "No question received yet."}</p>
 
-          <h4>AI suggested answer</h4>
+          <h4 ref={answerSectionRef}>AI suggested answer</h4>
 
           <div className="answer">
             {loading ? (
