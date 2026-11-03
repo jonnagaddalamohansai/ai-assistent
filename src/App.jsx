@@ -216,7 +216,7 @@ export default function App() {
   }, [transcript, question, answer, sessionMode]);
 
   const createInterviewSession = () => {
-    const bytes = new Uint8Array(4);
+    const bytes = new Uint8Array(6);
     window.crypto.getRandomValues(bytes);
     const code = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("").toUpperCase();
     setSessionCode(code);
@@ -227,8 +227,8 @@ export default function App() {
 
   const joinInterviewSession = () => {
     const code = sessionInput.trim().toUpperCase();
-    if (!/^[A-F0-9]{8}$/.test(code)) {
-      setError("Enter the 8-character session code shown on your laptop.");
+    if (!/^[A-F0-9]{12}$/.test(code)) {
+      setError("Enter the 12-character session code shown on your laptop.");
       return;
     }
     setError("");
