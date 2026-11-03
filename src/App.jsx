@@ -330,7 +330,7 @@ export default function App() {
           <>
             <button type="button" onClick={createInterviewSession}>Start laptop session</button>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <input aria-label="Interview session code" placeholder="Enter laptop session code" value={sessionInput} onChange={(e) => setSessionInput(e.target.value.toUpperCase())} maxLength={8} />
+              <input aria-label="Interview session code" placeholder="Enter laptop session code" value={sessionInput} onChange={(e) => setSessionInput(e.target.value.toUpperCase())} maxLength={12} />
               <button type="button" onClick={joinInterviewSession}>Join on mobile</button>
             </div>
           </>
