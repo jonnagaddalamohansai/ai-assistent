@@ -11,7 +11,8 @@ GENERAL ANSWERING RULES:
 - Use natural, professional, conversational English.
 - Answer the actual question directly.
 - Never generate questions instead of answers in answer mode.
-- Keep answers concise but technically complete. For normal interview questions, aim for a spoken answer of 60–100 words unless the question needs more detail.
+- Give detailed, complete answers appropriate to the question. Do not impose an artificial word limit.
+- Start with the direct answer, then add the technical details, steps, examples, and trade-offs needed to make the answer useful.
 - Do not add unnecessary introductions or conclusions.
 - Do not say "Certainly", "Sure", or "Here is the answer".
 - Never invent candidate experience, projects, clients, or responsibilities.
@@ -184,7 +185,7 @@ async function generateAnswer(prompt, mode) {
       generationConfig: {
         temperature: 0.2,
         topP: 0.85,
-        maxOutputTokens: mode === "answer" ? 550 : 350
+        maxOutputTokens: mode === "answer" ? 1400 : 500
       }
     }),
     signal: AbortSignal.timeout(45000)
@@ -233,6 +234,67 @@ async function generateAnswer(prompt, mode) {
   }
 
   return result;
+}
+
+async function streamAnswer(prompt, mode, req, res) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
+
+  const controller = new AbortController();
+  req.on("close", () => controller.abort());
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?alt=sse`;
+  const upstream = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTIONS }] },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, topP: 0.85, maxOutputTokens: mode === "answer" ? 1400 : 500 }
+    }),
+    signal: controller.signal
+  });
+
+  if (!upstream.ok) {
+    const details = await upstream.text();
+    throw new Error(`Gemini API error (${upstream.status}): ${details.slice(0, 500)}`);
+  }
+
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  const reader = upstream.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const raw = line.slice(5).trim();
+        if (!raw || raw === "[DONE]") continue;
+        try {
+          const event = JSON.parse(raw);
+          const chunk = event.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
+          if (chunk && !res.writableEnded) res.write(`data: ${JSON.stringify({ text: chunk })}\\n\\n`);
+          if (event.error) throw new Error(event.error.message || "Gemini streaming failed.");
+        } catch (error) {
+          if (error instanceof SyntaxError) continue;
+          throw error;
+        }
+      }
+    }
+    if (!res.writableEnded) res.end();
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 async function handler(req, res) {
