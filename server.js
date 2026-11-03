@@ -195,14 +195,25 @@ syncWss.on("connection", (client) => {
 
     if (message.type === "join") {
       const roomId = String(message.roomId || "").trim().toUpperCase();
-      if (!/^[A-F0-9]{8}$/.test(roomId)) {
+      if (!/^[A-F0-9]{12}$/.test(roomId)) {
         client.send(JSON.stringify({ type: "error", message: "Invalid session code." }));
         return;
       }
       joinedRoom = roomId;
       clientRole = message.role === "host" ? "host" : "viewer";
-      if (!interviewRooms.has(roomId)) interviewRooms.set(roomId, { snapshot: null, clients: new Set() });
+      if (!interviewRooms.has(roomId)) interviewRooms.set(roomId, { snapshot: null, clients: new Set(), host: null });
       const room = interviewRooms.get(roomId);
+      if (clientRole === "host" && room.host && room.host.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "error", message: "This session already has an active laptop host." }));
+        client.close(1008, "Host already connected");
+        return;
+      }
+      if (room.clients.size >= 5) {
+        client.send(JSON.stringify({ type: "error", message: "This session is full." }));
+        client.close(1008, "Session full");
+        return;
+      }
+      if (clientRole === "host") room.host = client;
       room.clients.add(client);
       client.send(JSON.stringify({ type: "joined", role: clientRole, snapshot: room.snapshot }));
       return;
@@ -230,6 +241,7 @@ syncWss.on("connection", (client) => {
     const room = interviewRooms.get(joinedRoom);
     if (!room) return;
     room.clients.delete(client);
+    if (room.host === client) room.host = null;
     if (room.clients.size === 0) interviewRooms.delete(joinedRoom);
   };
   client.on("close", removeClient);
