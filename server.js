@@ -194,6 +194,11 @@ syncWss.on("connection", (client) => {
     try { message = JSON.parse(raw.toString()); } catch { return; }
 
     if (message.type === "join") {
+      if (joinedRoom) {
+        client.send(JSON.stringify({ type: "error", message: "This connection has already joined a session." }));
+        client.close(1008, "Already joined");
+        return;
+      }
       const roomId = String(message.roomId || "").trim().toUpperCase();
       if (!/^[A-F0-9]{12}$/.test(roomId)) {
         client.send(JSON.stringify({ type: "error", message: "Invalid session code." }));
