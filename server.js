@@ -27,19 +27,28 @@ app.use(express.static(distPath));
 
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+const syncWss = new WebSocketServer({ noServer: true });
+const interviewRooms = new Map();
 
 // Live audio WebSocket
 server.on("upgrade", (request, socket, head) => {
   const pathname = new URL(request.url, "http://localhost").pathname;
 
-  if (pathname !== "/live-audio") {
-    socket.destroy();
+  if (pathname === "/live-audio") {
+    wss.handleUpgrade(request, socket, head, (client) => {
+      wss.emit("connection", client, request);
+    });
     return;
   }
 
-  wss.handleUpgrade(request, socket, head, (client) => {
-    wss.emit("connection", client, request);
-  });
+  if (pathname === "/live-sync") {
+    syncWss.handleUpgrade(request, socket, head, (client) => {
+      syncWss.emit("connection", client, request);
+    });
+    return;
+  }
+
+  socket.destroy();
 });
 
 wss.on("connection", (client) => {
@@ -173,6 +182,75 @@ wss.on("connection", (client) => {
       client.close();
     }
   });
+});
+
+// Laptop-to-mobile interview session synchronization.
+syncWss.on("connection", (client) => {
+  let joinedRoom = null;
+  let clientRole = "viewer";
+
+  client.on("message", (raw) => {
+    let message;
+    try { message = JSON.parse(raw.toString()); } catch { return; }
+
+    if (message.type === "join") {
+      if (joinedRoom) {
+        client.send(JSON.stringify({ type: "error", message: "This connection has already joined a session." }));
+        client.close(1008, "Already joined");
+        return;
+      }
+      const roomId = String(message.roomId || "").trim().toUpperCase();
+      if (!/^[A-F0-9]{12}$/.test(roomId)) {
+        client.send(JSON.stringify({ type: "error", message: "Invalid session code." }));
+        return;
+      }
+      joinedRoom = roomId;
+      clientRole = message.role === "host" ? "host" : "viewer";
+      if (!interviewRooms.has(roomId)) interviewRooms.set(roomId, { snapshot: null, clients: new Set(), host: null });
+      const room = interviewRooms.get(roomId);
+      if (clientRole === "host" && room.host && room.host.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "error", message: "This session already has an active laptop host." }));
+        client.close(1008, "Host already connected");
+        return;
+      }
+      if (room.clients.size >= 5) {
+        client.send(JSON.stringify({ type: "error", message: "This session is full." }));
+        client.close(1008, "Session full");
+        return;
+      }
+      if (clientRole === "host") room.host = client;
+      room.clients.add(client);
+      client.send(JSON.stringify({ type: "joined", role: clientRole, snapshot: room.snapshot }));
+      return;
+    }
+
+    if (message.type === "update" && joinedRoom && clientRole === "host") {
+      const room = interviewRooms.get(joinedRoom);
+      if (!room) return;
+      const snapshot = {
+        transcript: String(message.snapshot?.transcript || "").slice(-12000),
+        question: String(message.snapshot?.question || "").slice(0, 3000),
+        answer: String(message.snapshot?.answer || "").slice(0, 12000),
+        updatedAt: Date.now(),
+      };
+      room.snapshot = snapshot;
+      const payload = JSON.stringify({ type: "snapshot", snapshot });
+      for (const peer of room.clients) {
+        if (peer.readyState === WebSocket.OPEN) peer.send(payload);
+      }
+    }
+  });
+
+  const removeClient = () => {
+    if (!joinedRoom) return;
+    const room = interviewRooms.get(joinedRoom);
+    if (!room) return;
+    room.clients.delete(client);
+    if (room.host === client) room.host = null;
+    if (room.clients.size === 0) interviewRooms.delete(joinedRoom);
+  };
+  client.on("close", removeClient);
+  client.on("error", removeClient);
 });
 
 // React SPA fallback (Express 5 compatible)

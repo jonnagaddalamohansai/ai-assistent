@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -106,6 +106,11 @@ export default function App() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [sessionCode, setSessionCode] = useState("");
+  const [sessionInput, setSessionInput] = useState("");
+  const [sessionMode, setSessionMode] = useState("");
+  const [syncStatus, setSyncStatus] = useState("Not connected");
+  const syncSocketRef = useRef(null);
 
   const run = async (fn) => {
     setError("");
@@ -164,6 +169,81 @@ export default function App() {
     error: audioError,
   } = useSpeech(handleInterviewerText);
 
+  // Connect this device to a shared interview session.
+  useEffect(() => {
+    if (!sessionCode || !sessionMode) return;
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(`${protocol}//${window.location.host}/live-sync`);
+    syncSocketRef.current = socket;
+
+    socket.onopen = () => {
+      socket.send(JSON.stringify({ type: "join", roomId: sessionCode, role: sessionMode }));
+      setSyncStatus("Connected");
+      if (sessionMode === "host") {
+        socket.send(JSON.stringify({ type: "update", snapshot: { transcript, question, answer } }));
+      }
+    };
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "error") {
+        setSyncStatus(data.message || "Session error");
+        return;
+      }
+      if (data.type === "joined") setSyncStatus("Connected");
+      if (data.type === "snapshot" && sessionMode === "viewer" && data.snapshot) {
+        setTranscript(data.snapshot.transcript || "");
+        setQuestion(data.snapshot.question || "");
+        setAnswer(data.snapshot.answer || "");
+      }
+    };
+
+    socket.onerror = () => setSyncStatus("Connection error");
+    socket.onclose = () => setSyncStatus("Disconnected");
+
+    return () => {
+      socket.close();
+      if (syncSocketRef.current === socket) syncSocketRef.current = null;
+    };
+  }, [sessionCode, sessionMode]);
+
+  // Publish laptop updates; viewer devices only receive snapshots.
+  useEffect(() => {
+    const socket = syncSocketRef.current;
+    if (sessionMode !== "host" || !socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: "update", snapshot: { transcript, question, answer } }));
+  }, [transcript, question, answer, sessionMode]);
+
+  const createInterviewSession = () => {
+    const bytes = new Uint8Array(6);
+    window.crypto.getRandomValues(bytes);
+    const code = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("").toUpperCase();
+    setSessionCode(code);
+    setSessionMode("host");
+    setSessionInput(code);
+    setSyncStatus("Connecting...");
+  };
+
+  const joinInterviewSession = () => {
+    const code = sessionInput.trim().toUpperCase();
+    if (!/^[A-F0-9]{12}$/.test(code)) {
+      setError("Enter the 12-character session code shown on your laptop.");
+      return;
+    }
+    setError("");
+    setSessionCode(code);
+    setSessionMode("viewer");
+    setSyncStatus("Connecting...");
+  };
+
+  const leaveInterviewSession = () => {
+    syncSocketRef.current?.close();
+    setSessionCode("");
+    setSessionMode("");
+    setSyncStatus("Not connected");
+  };
+
   // Generate mock interview question
   const newMockQuestion = () =>
     run(async () => {
@@ -206,6 +286,22 @@ export default function App() {
 
   const fillerCount = (myAnswer.match(FILLERS) || []).length;
 
+  if (sessionMode === "viewer") {
+    return (
+      <div className="app">
+        <h2>Voice Coach — Mobile View</h2>
+        <p>Session: <strong>{sessionCode}</strong> · {syncStatus}</p>
+        <button type="button" onClick={leaveInterviewSession}>Leave session</button>
+        <h4>Interviewer transcript</h4>
+        <pre className="answer">{transcript || "Waiting for interviewer speech..."}</pre>
+        <h4>Latest interviewer question</h4>
+        <div className="answer">{question || "No question received yet."}</div>
+        <h4>AI suggested answer</h4>
+        <div className="answer">{answer ? <MarkdownAnswer>{answer}</MarkdownAnswer> : "Waiting for the AI answer..."}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <h2>Voice Coach</h2>
@@ -226,6 +322,28 @@ export default function App() {
           save("role", setRole)(e.target.value)
         }
       />
+
+      <section className="session-panel" style={{ border: "1px solid #777", borderRadius: 10, padding: 12, margin: "16px 0" }}>
+        <h3>Mobile live sync</h3>
+        <p>Connection: {syncStatus}</p>
+        {!sessionMode ? (
+          <>
+            <button type="button" onClick={createInterviewSession}>Start laptop session</button>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <input aria-label="Interview session code" placeholder="Enter laptop session code" value={sessionInput} onChange={(e) => setSessionInput(e.target.value.toUpperCase())} maxLength={12} />
+              <button type="button" onClick={joinInterviewSession}>Join on mobile</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p>{sessionMode === "host" ? "Share this code with your mobile:" : "Joined interview session:"}</p>
+            <strong style={{ fontSize: 24, letterSpacing: 3 }}>{sessionCode}</strong>
+            <button type="button" onClick={() => navigator.clipboard?.writeText(sessionCode)}>Copy code</button>
+            <button type="button" onClick={leaveInterviewSession}>Leave session</button>
+            {sessionMode === "viewer" && <p>Mobile is in view-only mode. Questions and answers will appear here as your laptop receives them.</p>}
+          </>
+        )}
+      </section>
 
       <div className="tabs">
         <button
