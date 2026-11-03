@@ -286,6 +286,22 @@ export default function App() {
 
   const fillerCount = (myAnswer.match(FILLERS) || []).length;
 
+  if (sessionMode === "viewer") {
+    return (
+      <div className="app">
+        <h2>Voice Coach — Mobile View</h2>
+        <p>Session: <strong>{sessionCode}</strong> · {syncStatus}</p>
+        <button type="button" onClick={leaveInterviewSession}>Leave session</button>
+        <h4>Interviewer transcript</h4>
+        <pre className="answer">{transcript || "Waiting for interviewer speech..."}</pre>
+        <h4>Latest interviewer question</h4>
+        <div className="answer">{question || "No question received yet."}</div>
+        <h4>AI suggested answer</h4>
+        <div className="answer">{answer ? <MarkdownAnswer>{answer}</MarkdownAnswer> : "Waiting for the AI answer..."}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <h2>Voice Coach</h2>
