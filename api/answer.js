@@ -92,7 +92,7 @@ TECHNICAL RESPONSE GUIDANCE:
   technical approach hypothetically without claiming personal implementation.
 
 Return only the interview answer.
-`;;
+`;
 
 const MODE_INSTRUCTIONS = {
   answer: "Answer the interviewer's question immediately and accurately. Be concise but complete. Include code when requested.",
