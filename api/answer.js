@@ -11,7 +11,8 @@ GENERAL ANSWERING RULES:
 - Use natural, professional, conversational English.
 - Answer the actual question directly.
 - Never generate questions instead of answers in answer mode.
-- Keep answers concise but technically complete.
+- Give detailed, complete answers appropriate to the question. Do not impose an artificial word limit.
+- Start with the direct answer, then add the technical details, steps, examples, and trade-offs needed to make the answer useful.
 - Do not add unnecessary introductions or conclusions.
 - Do not say "Certainly", "Sure", or "Here is the answer".
 - Never invent candidate experience, projects, clients, or responsibilities.
@@ -73,7 +74,7 @@ const MODE_INSTRUCTIONS = {
 Answer the actual interviewer question directly.
 
 If code is requested, provide complete executable SQL, Python, or PySpark code.
-If a normal technical explanation is requested, use one natural paragraph.
+If a normal technical explanation is requested, give a complete, useful explanation with enough detail for an interview response.
 Never generate interview questions.
 `,
 
@@ -127,6 +128,8 @@ ${body.jobDescription || "Not supplied"}
 ACTUAL INTERVIEWER QUESTION:
 ${body.question || "Not supplied"}
 
+PREVIOUS INTERVIEWER QUESTION:\n${body.previousQuestion || "Not supplied"}
+
 CANDIDATE'S PREVIOUS ANSWER:
 ${body.answer || "Not supplied"}
 
@@ -136,11 +139,13 @@ ${body.transcript || "Not supplied"}
 FINAL INSTRUCTIONS:
 Answer the actual question, not the surrounding instructions or profile.
 
+If the current question is unclear, incomplete, or only a fragment, interpret it using the latest transcript, previous interviewer question, and previous suggested answer. When context strongly supports one interpretation, answer that intended topic directly. State a short assumption only if needed. Do not carry forward an old topic when the new question is clearly different. If context does not resolve it, provide the safest useful answer and briefly mention what is uncertain.
+
 If the interviewer asks for SQL, Python, or PySpark code,
 provide complete executable code in a Markdown code block.
 
 If the interviewer asks a conceptual question,
-provide a concise natural-language explanation.
+provide a detailed, natural-language explanation.
 
 Use the supplied candidate details only when relevant.
 Never invent personal project experience.
@@ -184,7 +189,7 @@ async function generateAnswer(prompt, mode) {
       generationConfig: {
         temperature: 0.2,
         topP: 0.85,
-        maxOutputTokens: mode === "answer" ? 800 : 400
+        maxOutputTokens: mode === "answer" ? 1400 : 500
       }
     }),
     signal: AbortSignal.timeout(45000)
@@ -235,6 +240,61 @@ async function generateAnswer(prompt, mode) {
   return result;
 }
 
+async function streamAnswer(prompt, mode, res) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
+  const controller = new AbortController();
+  res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?alt=sse`;
+  const upstream = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTIONS }] },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, topP: 0.85, maxOutputTokens: mode === "answer" ? 1400 : 500 }
+    }),
+    signal: controller.signal
+  });
+  if (!upstream.ok) {
+    const details = await upstream.text();
+    throw new Error(`Gemini API error (${upstream.status}): ${details.slice(0, 500)}`);
+  }
+  if (!upstream.body) throw new Error("Gemini returned an empty streaming response.");
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+  const reader = upstream.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const processFrame = (frame) => {
+    const data = frame.split(/\r?\n/).filter(line => line.startsWith("data:"))
+      .map(line => line.slice(5).trim()).join("\n");
+    if (!data || data === "[DONE]") return;
+    const event = JSON.parse(data);
+    if (event.error) throw new Error(event.error.message || "Gemini streaming failed.");
+    const chunk = event.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
+    if (chunk && !res.writableEnded) res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+  };
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split(/\r?\n\r?\n/);
+      buffer = frames.pop() || "";
+      for (const frame of frames) if (frame.trim()) processFrame(frame);
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) processFrame(buffer);
+    if (!res.writableEnded) res.end();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({
@@ -270,6 +330,11 @@ async function handler(req, res) {
 
     const prompt = buildPrompt(body);
 
+    if (body.stream === true) {
+      await streamAnswer(prompt, mode, res);
+      return;
+    }
+
     const result = await generateAnswer(prompt, mode);
 
     return res.status(200).json({
@@ -278,6 +343,14 @@ async function handler(req, res) {
 
   } catch (error) {
     console.error("Gemini AI Coach error:", error);
+
+    if (res.headersSent) {
+      if (!res.writableEnded) {
+        res.write("data: " + JSON.stringify({ error: error.message || "Streaming failed." }) + "\n\n");
+        res.end();
+      }
+      return;
+    }
 
     return res.status(500).json({
       error:

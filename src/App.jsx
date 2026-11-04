@@ -111,6 +111,19 @@ export default function App() {
   const [sessionMode, setSessionMode] = useState("");
   const [syncStatus, setSyncStatus] = useState("Not connected");
   const syncSocketRef = useRef(null);
+  const answerSectionRef = useRef(null);
+  const lastScrolledQuestionRef = useRef("");
+
+  // Bring the newest suggested answer into view automatically.
+  useEffect(() => {
+    if (!question && !answer) return;
+    const isNewQuestion = question !== lastScrolledQuestionRef.current;
+    lastScrolledQuestionRef.current = question;
+    answerSectionRef.current?.scrollIntoView({
+      behavior: isNewQuestion ? "smooth" : "auto",
+      block: "start",
+    });
+  }, [question, answer]);
 
   const run = async (fn) => {
     setError("");
@@ -126,23 +139,31 @@ export default function App() {
   };
 
   // Generate an answer from the interviewer question
-  const ask = async (q) => {
+  const ask = async (q, transcriptContext = transcript) => {
     const cleanQuestion = String(q || "").trim();
 
     if (!cleanQuestion) return;
 
+    const previousQuestion = question;
+    const previousAnswer = answer;
     setQuestion(cleanQuestion);
     setAnswer("");
 
     await run(async () => {
-      const result = await callApi({
-        mode: "answer",
-        question: cleanQuestion,
-        profile,
-        role,
-      });
+      const result = await callApi(
+        {
+          mode: "answer",
+          question: cleanQuestion,
+          previousQuestion,
+          answer: previousAnswer,
+          transcript: transcriptContext,
+          profile,
+          role,
+        },
+        { onChunk: (chunk) => setAnswer((previous) => previous + chunk) }
+      );
 
-      setAnswer(result);
+      if (!result) setAnswer("No answer was generated. Please try again.");
     });
   };
 
@@ -152,12 +173,11 @@ export default function App() {
 
     if (!cleanText) return;
 
-    setTranscript((previous) =>
-      (previous + "\n" + cleanText).trim()
-    );
+    const updatedTranscript = (transcript + "\n" + cleanText).trim();
+    setTranscript(updatedTranscript);
 
     if (tab === "coach") {
-      ask(cleanText);
+      ask(cleanText, updatedTranscript);
     }
   };
 
@@ -292,12 +312,11 @@ export default function App() {
         <h2>Voice Coach — Mobile View</h2>
         <p>Session: <strong>{sessionCode}</strong> · {syncStatus}</p>
         <button type="button" onClick={leaveInterviewSession}>Leave session</button>
-        <h4>Interviewer transcript</h4>
-        <pre className="answer">{transcript || "Waiting for interviewer speech..."}</pre>
-        <h4>Latest interviewer question</h4>
-        <div className="answer">{question || "No question received yet."}</div>
-        <h4>AI suggested answer</h4>
-        <div className="answer">{answer ? <MarkdownAnswer>{answer}</MarkdownAnswer> : "Waiting for the AI answer..."}</div>
+        <h2 ref={answerSectionRef}>Suggested answer</h2>
+        <div className="answer" aria-live="polite">
+          {answer ? <MarkdownAnswer>{answer}</MarkdownAnswer> : "Listening for the next question..."}
+          {loading && <p>Preparing the rest of the answer...</p>}
+        </div>
       </div>
     );
   }
@@ -396,16 +415,17 @@ export default function App() {
 
           <p>{question || "No question received yet."}</p>
 
-          <h4>AI suggested answer</h4>
+          <h4 ref={answerSectionRef}>AI suggested answer</h4>
 
-          <div className="answer">
-            {loading ? (
-              "Generating your answer..."
-            ) : answer ? (
+          <div className="answer" aria-live="polite">
+            {answer ? (
               <MarkdownAnswer>{answer}</MarkdownAnswer>
+            ) : loading ? (
+              "Starting your answer..."
             ) : (
               "Your answer will appear here automatically."
             )}
+            {loading && answer && <p>Preparing the rest of the answer...</p>}
           </div>
 
           <input
