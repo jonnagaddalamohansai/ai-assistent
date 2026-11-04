@@ -46,8 +46,8 @@ const MODE_INSTRUCTIONS = {
 const fromStart = (value, max) => String(value || "").slice(0, max);
 const fromEnd = (value, max) => String(value || "").slice(-max);
 
-function isPersonalResumeQuestion(question, transcript) {
-  const text = `${question || ""} ${transcript || ""}`;
+function isPersonalResumeQuestion(question) {
+  const text = String(question || "");
   return /tell me about yourself|introduce yourself|self[ -]?introduction|walk me through your background|your education|educational qualification|which degree|what degree|college|university|graduat(e|ion)|current company|currently working|which company|where are you working|company name|current employer|current designation|current role|how many years of experience|your experience/i.test(text);
 }
 
@@ -68,7 +68,7 @@ function buildPrompt(body) {
   const mode = MODE_INSTRUCTIONS[body.mode] ? body.mode : "answer";
   const question = String(body.question || "");
   const transcript = String(body.transcript || "");
-  const personalQuestion = mode === "answer" && isPersonalResumeQuestion(question, transcript);
+  const personalQuestion = mode === "answer" && isPersonalResumeQuestion(question);
 
   return [
     `TASK: ${MODE_INSTRUCTIONS[mode]}`,
