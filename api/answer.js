@@ -324,7 +324,12 @@ async function handler(req, res) {
       });
     }
 
-    const prompt = buildPrompt(body);\n\n    if (body.stream === true) {\n      await streamAnswer(prompt, mode, res);\n      return;\n    }
+    const prompt = buildPrompt(body);
+
+    if (body.stream === true) {
+      await streamAnswer(prompt, mode, res);
+      return;
+    }
 
     const result = await generateAnswer(prompt, mode);
 
@@ -333,7 +338,15 @@ async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("Gemini AI Coach error:", error);\n\n    if (res.headersSent) {\n      if (!res.writableEnded) {\n        res.write("data: " + JSON.stringify({ error: error.message || "Streaming failed." }) + "\\n\\n");\n        res.end();\n      }\n      return;\n    }
+    console.error("Gemini AI Coach error:", error);
+
+    if (res.headersSent) {
+      if (!res.writableEnded) {
+        res.write("data: " + JSON.stringify({ error: error.message || "Streaming failed." }) + "\n\n");
+        res.end();
+      }
+      return;
+    }
 
     return res.status(500).json({
       error:
