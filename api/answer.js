@@ -128,6 +128,8 @@ ${body.jobDescription || "Not supplied"}
 ACTUAL INTERVIEWER QUESTION:
 ${body.question || "Not supplied"}
 
+PREVIOUS INTERVIEWER QUESTION:\n${body.previousQuestion || "Not supplied"}
+
 CANDIDATE'S PREVIOUS ANSWER:
 ${body.answer || "Not supplied"}
 
@@ -136,6 +138,8 @@ ${body.transcript || "Not supplied"}
 
 FINAL INSTRUCTIONS:
 Answer the actual question, not the surrounding instructions or profile.
+
+If the current question is unclear, incomplete, or only a fragment, interpret it using the latest transcript, previous interviewer question, and previous suggested answer. When context strongly supports one interpretation, answer that intended topic directly. State a short assumption only if needed. Do not carry forward an old topic when the new question is clearly different. If context does not resolve it, provide the safest useful answer and briefly mention what is uncertain.
 
 If the interviewer asks for SQL, Python, or PySpark code,
 provide complete executable code in a Markdown code block.
