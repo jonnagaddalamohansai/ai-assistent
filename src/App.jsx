@@ -111,13 +111,17 @@ export default function App() {
   const [sessionMode, setSessionMode] = useState("");
   const [syncStatus, setSyncStatus] = useState("Not connected");
   const syncSocketRef = useRef(null);
-  const answerSectionRef = useRef(null);
+  const answerSectionRef = useRef(null);\n  const lastScrolledQuestionRef = useRef("");
 
   // Bring the newest suggested answer into view automatically.
   useEffect(() => {
-    if (question || answer) {
-      answerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    if (!question && !answer) return;
+    const isNewQuestion = question !== lastScrolledQuestionRef.current;
+    lastScrolledQuestionRef.current = question;
+    answerSectionRef.current?.scrollIntoView({
+      behavior: isNewQuestion ? "smooth" : "auto",
+      block: "start",
+    });
   }, [question, answer]);
 
   const run = async (fn) => {
@@ -134,17 +138,27 @@ export default function App() {
   };
 
   // Generate an answer from the interviewer question
-  const ask = async (q) => {
+  const ask = async (q, transcriptContext = transcript) => {
     const cleanQuestion = String(q || "").trim();
 
     if (!cleanQuestion) return;
 
+    const previousQuestion = question;
+    const previousAnswer = answer;
     setQuestion(cleanQuestion);
     setAnswer("");
 
     await run(async () => {
       const result = await callApi(
-        { mode: "answer", question: cleanQuestion, profile, role },
+        {
+          mode: "answer",
+          question: cleanQuestion,
+          previousQuestion,
+          answer: previousAnswer,
+          transcript: transcriptContext,
+          profile,
+          role,
+        },
         { onChunk: (chunk) => setAnswer((previous) => previous + chunk) }
       );
 
@@ -158,12 +172,11 @@ export default function App() {
 
     if (!cleanText) return;
 
-    setTranscript((previous) =>
-      (previous + "\n" + cleanText).trim()
-    );
+    const updatedTranscript = (transcript + "\n" + cleanText).trim();
+    setTranscript(updatedTranscript);
 
     if (tab === "coach") {
-      ask(cleanText);
+      ask(cleanText, updatedTranscript);
     }
   };
 
