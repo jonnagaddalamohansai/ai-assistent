@@ -63,3 +63,10 @@
 .answer p {
   line-height: 1.6;
 }
+
+
+/* Keep the answer heading clear of the top edge after automatic scrolling. */
+.mobile-answer-section {
+  scroll-margin-top: 16px;
+  width: 100%;
+}
