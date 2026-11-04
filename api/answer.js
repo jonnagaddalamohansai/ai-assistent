@@ -1,22 +1,35 @@
 const MODEL = "gemini-3.5-flash-lite";
 
-// Keep the system prompt short: a smaller input prompt usually reaches the
-// first generated token sooner, especially during live interview use.
+// Keep instructions compact so the resume-grounding improvement does not
+// undo the faster first-token behavior from the previous release.
 const SYSTEM_INSTRUCTIONS = `
-You are a real-time technical interview coach.
-Answer the interviewer's question directly in natural, professional English.
-Start with the answer immediately; no greeting, preamble, or conclusion.
-For conceptual questions, be clear and useful without unnecessary detail.
-For scenario questions, give practical steps in order.
-For comparisons, state the key differences.
-For project questions, explain the workflow chronologically and never invent
-the candidate's experience, clients, projects, or responsibilities.
-For SQL, Python, or PySpark coding requests, provide complete executable code
-with imports and sensible edge-case handling. Use the requested language.
-For large-data PySpark questions, avoid collecting data to the driver.
-Use candidate details only when directly relevant.
-If a question is a fragment, use the recent transcript and previous question
-to infer its meaning. Do not force old context onto a clearly new topic.
+You are a real-time interview coach. Give the candidate a natural answer they
+can say directly to an interviewer. Start with the answer, without greetings
+or filler. Be concise but complete.
+
+PERSONAL / RESUME QUESTIONS:
+- Treat the supplied RESUME/PROFILE as the source of truth for personal facts.
+- For self-introduction, prioritize the candidate's actual education,
+  current company, current designation, experience, and resume-listed project
+  experience, in a natural first-person spoken answer.
+- For education questions, state the exact degree, institution, and year
+  only when present in the resume.
+- For current-company questions, state the exact employer, designation,
+  employment dates, and project/client only when explicitly present.
+- Do not replace the candidate's real details with the target role.
+- Never infer an employer, degree, dates, client, or project from skills.
+- If a requested fact is absent or unclear, say briefly that it is not
+  specified in the supplied resume. Do not guess or fill the gap.
+- Do not confuse previous employers with the current employer.
+
+TECHNICAL QUESTIONS:
+- Answer directly in natural professional English.
+- Explain concepts clearly and practically; give steps for scenarios.
+- For SQL, Python, or PySpark coding requests, provide complete executable
+  code with imports and sensible edge-case handling.
+- For large-data PySpark, avoid collecting data to the driver.
+- Use prior transcript only to resolve an incomplete question; do not let it
+  override a clear new question.
 Return only the answer.
 `;
 
@@ -27,29 +40,57 @@ const MODE_INSTRUCTIONS = {
   resume_prep: "Give a natural interview answer grounded in the supplied resume and job description. Never invent experience."
 };
 
-const clip = (value, max) => String(value || "").slice(-max);
+// Resume details are commonly near the beginning of the profile field.
+// Preserve the beginning for profile/resume, and preserve the end for recent
+// transcript/context where the newest content is most useful.
+const fromStart = (value, max) => String(value || "").slice(0, max);
+const fromEnd = (value, max) => String(value || "").slice(-max);
+
+function isPersonalResumeQuestion(question, transcript) {
+  const text = `${question || ""} ${transcript || ""}`;
+  return /tell me about yourself|introduce yourself|self[ -]?introduction|walk me through your background|your education|educational qualification|which degree|what degree|college|university|graduat(e|ion)|current company|currently working|which company|where are you working|company name|current employer|current designation|current role|how many years of experience|your experience/i.test(text);
+}
+
+function personalQuestionGuidance(question) {
+  if (/tell me about yourself|introduce yourself|self[ -]?introduction|walk me through your background/i.test(question)) {
+    return "PERSONAL QUESTION TYPE: SELF-INTRODUCTION. Give a natural first-person answer of about 45-75 seconds. Include education first, then actual work experience, current company and designation, relevant responsibilities/projects, and key skills. Use only facts stated in the resume/profile. Do not turn the answer into a generic skills list.";
+  }
+  if (/education|educational qualification|degree|college|university|graduat/i.test(question)) {
+    return "PERSONAL QUESTION TYPE: EDUCATION. Answer specifically with the exact qualification and college/university from the resume/profile. Include specialization and graduation year only if stated. Do not discuss unrelated technical skills.";
+  }
+  if (/current company|currently working|which company|where are you working|company name|current employer|current designation|current role/i.test(question)) {
+    return "PERSONAL QUESTION TYPE: CURRENT EMPLOYMENT. State the exact current company and designation from the resume/profile, plus dates and project/client only if stated. Do not substitute the target role or mention a previous employer as current.";
+  }
+  return "PERSONAL QUESTION TYPE: RESUME FACT. Answer the specific personal fact requested using only the resume/profile.";
+}
 
 function buildPrompt(body) {
   const mode = MODE_INSTRUCTIONS[body.mode] ? body.mode : "answer";
+  const question = String(body.question || "");
+  const transcript = String(body.transcript || "");
+  const personalQuestion = mode === "answer" && isPersonalResumeQuestion(question, transcript);
+
   return [
     `TASK: ${MODE_INSTRUCTIONS[mode]}`,
-    `ROLE: ${clip(body.role, 300) || "Not specified"}`,
-    `PROFILE: ${clip(body.profile, 1200) || "Not supplied"}`,
-    `RESUME: ${clip(body.resume, 2500) || "Not supplied"}`,
-    `JOB DESCRIPTION: ${clip(body.jobDescription, 1800) || "Not supplied"}`,
-    `PREVIOUS QUESTION: ${clip(body.previousQuestion, 500) || "None"}`,
-    `PREVIOUS SUGGESTED ANSWER: ${clip(body.answer, 900) || "None"}`,
-    `RECENT TRANSCRIPT: ${clip(body.transcript, 2200) || "None"}`,
-    `CURRENT INTERVIEWER QUESTION: ${clip(body.question, 1200) || "Not supplied"}`,
-    "Answer the current question first. Use prior context only to resolve fragments or references. Keep ordinary spoken answers focused and interview-ready; include the technical details needed to be correct. If code is requested, provide complete executable code."
-  ].join("\n");
+    `ROLE BEING TARGETED (not necessarily the candidate's current job): ${fromStart(body.role, 300) || "Not specified"}`,
+    `RESUME / CANDIDATE PROFILE (source of truth; beginning preserved):\n${fromStart(body.profile, 10000) || "Not supplied"}`,
+    `ADDITIONAL RESUME TEXT:\n${fromStart(body.resume, 5000) || "Not supplied"}`,
+    `JOB DESCRIPTION:\n${fromStart(body.jobDescription, 1800) || "Not supplied"}`,
+    `PREVIOUS INTERVIEWER QUESTION: ${fromEnd(body.previousQuestion, 500) || "None"}`,
+    `PREVIOUS SUGGESTED ANSWER: ${fromEnd(body.answer, 700) || "None"}`,
+    `RECENT TRANSCRIPT (newest text preserved):\n${fromEnd(transcript, 1800) || "None"}`,
+    `CURRENT INTERVIEWER QUESTION: ${fromEnd(question, 1200) || "Not supplied"}`,
+    personalQuestion ? personalQuestionGuidance(question + " " + transcript) : "",
+    personalQuestion
+      ? "For this personal question, prioritize the resume/profile over generic role knowledge and previous generated answers. If the resume does not contain the requested fact, clearly say it is not specified rather than guessing."
+      : "Answer the current technical question first. Use prior context only to resolve fragments. Keep spoken answers focused and interview-ready. If code is requested, provide complete executable code."
+  ].filter(Boolean).join("\n\n");
 }
 
 function generationConfig(mode) {
   return {
     temperature: 0.2,
     maxOutputTokens: mode === "answer" ? 1000 : 400,
-    // Flash-Lite supports minimal thinking, its lowest-latency setting.
     thinkingConfig: { thinkingLevel: "minimal" }
   };
 }
