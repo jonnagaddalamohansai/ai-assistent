@@ -114,16 +114,21 @@ export default function App() {
   const answerSectionRef = useRef(null);
   const lastScrolledQuestionRef = useRef("");
 
-  // Bring the newest suggested answer into view automatically.
+  // Scroll to the answer section once when a new interviewer question arrives.
+  // Do not repeat this on every streamed token; that can make mobile scrolling jump.
   useEffect(() => {
-    if (!question && !answer) return;
-    const isNewQuestion = question !== lastScrolledQuestionRef.current;
+    if (!question || question === lastScrolledQuestionRef.current) return;
     lastScrolledQuestionRef.current = question;
-    answerSectionRef.current?.scrollIntoView({
-      behavior: isNewQuestion ? "smooth" : "auto",
-      block: "start",
+
+    const frame = window.requestAnimationFrame(() => {
+      answerSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     });
-  }, [question, answer]);
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [question]);
 
   const run = async (fn) => {
     setError("");
@@ -312,11 +317,13 @@ export default function App() {
         <h2>Voice Coach — Mobile View</h2>
         <p>Session: <strong>{sessionCode}</strong> · {syncStatus}</p>
         <button type="button" onClick={leaveInterviewSession}>Leave session</button>
-        <h2 ref={answerSectionRef}>Suggested answer</h2>
-        <div className="answer" aria-live="polite">
-          {answer ? <MarkdownAnswer>{answer}</MarkdownAnswer> : "Listening for the next question..."}
-          {loading && <p>Preparing the rest of the answer...</p>}
-        </div>
+        <section className="mobile-answer-section" ref={answerSectionRef}>
+          <h2>Suggested answer</h2>
+          <div className="answer" aria-live="polite">
+            {answer ? <MarkdownAnswer>{answer}</MarkdownAnswer> : "Listening for the next question..."}
+            {loading && <p>Preparing the rest of the answer...</p>}
+          </div>
+        </section>
       </div>
     );
   }
@@ -415,18 +422,19 @@ export default function App() {
 
           <p>{question || "No question received yet."}</p>
 
-          <h4 ref={answerSectionRef}>AI suggested answer</h4>
-
-          <div className="answer" aria-live="polite">
-            {answer ? (
-              <MarkdownAnswer>{answer}</MarkdownAnswer>
-            ) : loading ? (
-              "Starting your answer..."
-            ) : (
-              "Your answer will appear here automatically."
-            )}
-            {loading && answer && <p>Preparing the rest of the answer...</p>}
-          </div>
+          <section className="mobile-answer-section" ref={answerSectionRef}>
+            <h4>AI suggested answer</h4>
+            <div className="answer" aria-live="polite">
+              {answer ? (
+                <MarkdownAnswer>{answer}</MarkdownAnswer>
+              ) : loading ? (
+                "Starting your answer..."
+              ) : (
+                "Your answer will appear here automatically."
+              )}
+              {loading && answer && <p>Preparing the rest of the answer...</p>}
+            </div>
+          </section>
 
           <input
             placeholder="Or type a question and press Enter"
