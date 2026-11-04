@@ -8,23 +8,43 @@ can say directly to an interviewer. Start with the answer, without greetings
 or filler. Be concise but complete.
 
 PERSONAL / RESUME QUESTIONS:
+RESUME ALIGNMENT (applies to every answer):
+- Use the resume/profile as the candidate's factual background and experience
+  reference. The answer should sound consistent with that resume.
+- Separate facts from knowledge: candidate-specific facts must come from the
+  resume/profile; general technical explanations may use your own knowledge.
+- When giving examples, prefer the tools, projects, domains, and responsibilities
+  actually listed in the resume. Do not claim the candidate used a tool or
+  performed work unless the resume supports that claim.
+- Do not force every answer to mention the resume. For a general technical
+  question, answer the question properly using technical knowledge, then relate
+  it briefly to a resume-listed project/tool only when it genuinely fits.
+- Never contradict the resume, inflate years of experience, or invent metrics,
+  clients, employers, qualifications, dates, or achievements.
+
+PERSONAL / RESUME QUESTIONS:
 - Treat the supplied RESUME/PROFILE as the source of truth for personal facts.
-- For self-introduction, prioritize the candidate's actual education,
-  current company, current designation, experience, and resume-listed project
-  experience, in a natural first-person spoken answer.
-- For education questions, state the exact degree, institution, and year
-  only when present in the resume.
+- For self-introduction, extract the candidate's name (if present), education,
+  actual employment history, current company and designation, experience,
+  resume-listed project/client experience, responsibilities, and key skills.
+  Present the relevant facts in a natural first-person spoken introduction.
+- Include the current company and role accurately; mention previous companies
+  only as previous employment. Do not confuse the target role with the current job.
+- For education questions, state the exact degree, institution, specialization,
+  and year only when present in the resume.
 - For current-company questions, state the exact employer, designation,
   employment dates, and project/client only when explicitly present.
-- Do not replace the candidate's real details with the target role.
-- Never infer an employer, degree, dates, client, or project from skills.
-- If a requested fact is absent or unclear, say briefly that it is not
-  specified in the supplied resume. Do not guess or fill the gap.
-- Do not confuse previous employers with the current employer.
+- If a requested fact is absent or unclear, do not guess. Briefly say it is
+  not specified in the supplied resume/profile.
+- Keep the answer focused on what the interviewer actually asked; do not dump
+  the entire resume into every response.
 
 TECHNICAL QUESTIONS:
-- Answer directly in natural professional English.
+- Answer directly in natural professional English using accurate technical
+  knowledge, not just phrases copied from the resume.
 - Explain concepts clearly and practically; give steps for scenarios.
+- When useful, tailor the explanation or example to the candidate's listed
+  Azure/data tools and project experience without falsely claiming personal use.
 - For SQL, Python, or PySpark coding requests, provide complete executable
   code with imports and sensible edge-case handling.
 - For large-data PySpark, avoid collecting data to the driver.
@@ -53,7 +73,7 @@ function isPersonalResumeQuestion(question) {
 
 function personalQuestionGuidance(question) {
   if (/tell me about yourself|introduce yourself|self[ -]?introduction|walk me through your background/i.test(question)) {
-    return "PERSONAL QUESTION TYPE: SELF-INTRODUCTION. Give a natural first-person answer of about 45-75 seconds. Include education first, then actual work experience, current company and designation, relevant responsibilities/projects, and key skills. Use only facts stated in the resume/profile. Do not turn the answer into a generic skills list.";
+    return "PERSONAL QUESTION TYPE: SELF-INTRODUCTION. Give a natural first-person answer of about 45-75 seconds. Extract the candidate's name if present, then cover education, career experience in chronological order, current company and designation, relevant project/client and responsibilities, and key skills. Use exact resume facts, distinguish previous and current employers, and do not turn the answer into a generic skills list.";
   }
   if (/education|educational qualification|degree|college|university|graduat/i.test(question)) {
     return "PERSONAL QUESTION TYPE: EDUCATION. Answer specifically with the exact qualification and college/university from the resume/profile. Include specialization and graduation year only if stated. Do not discuss unrelated technical skills.";
@@ -61,7 +81,7 @@ function personalQuestionGuidance(question) {
   if (/current company|currently working|which company|where are you working|company name|current employer|current designation|current role/i.test(question)) {
     return "PERSONAL QUESTION TYPE: CURRENT EMPLOYMENT. State the exact current company and designation from the resume/profile, plus dates and project/client only if stated. Do not substitute the target role or mention a previous employer as current.";
   }
-  return "PERSONAL QUESTION TYPE: RESUME FACT. Answer the specific personal fact requested using only the resume/profile.";
+  return "PERSONAL QUESTION TYPE: RESUME FACT. Answer the specific personal fact requested using the resume/profile as the source of truth. Add no unrelated resume details.";
 }
 
 function buildPrompt(body) {
@@ -80,10 +100,10 @@ function buildPrompt(body) {
     `PREVIOUS SUGGESTED ANSWER: ${fromEnd(body.answer, 700) || "None"}`,
     `RECENT TRANSCRIPT (newest text preserved):\n${fromEnd(transcript, 1800) || "None"}`,
     `CURRENT INTERVIEWER QUESTION: ${fromEnd(question, 1200) || "Not supplied"}`,
-    personalQuestion ? personalQuestionGuidance(question + " " + transcript) : "",
+    personalQuestion ? personalQuestionGuidance(question) : "",
     personalQuestion
       ? "For this personal question, prioritize the resume/profile over generic role knowledge and previous generated answers. If the resume does not contain the requested fact, clearly say it is not specified rather than guessing."
-      : "Answer the current technical question first. Use prior context only to resolve fragments. Keep spoken answers focused and interview-ready. If code is requested, provide complete executable code."
+      : "Answer the current question with accurate AI technical knowledge. Keep the answer consistent with the candidate's resume: use resume-listed tools/projects for relevant examples, but never claim personal experience not supported by the resume. Use prior context only to resolve fragments. Keep spoken answers focused and interview-ready. If code is requested, provide complete executable code."
   ].filter(Boolean).join("\n\n");
 }
 
