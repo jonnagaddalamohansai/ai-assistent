@@ -74,7 +74,7 @@ const MODE_INSTRUCTIONS = {
 Answer the actual interviewer question directly.
 
 If code is requested, provide complete executable SQL, Python, or PySpark code.
-If a normal technical explanation is requested, use one natural paragraph.
+If a normal technical explanation is requested, give a complete, useful explanation with enough detail for an interview response.
 Never generate interview questions.
 `,
 
@@ -141,7 +141,7 @@ If the interviewer asks for SQL, Python, or PySpark code,
 provide complete executable code in a Markdown code block.
 
 If the interviewer asks a conceptual question,
-provide a concise natural-language explanation.
+provide a detailed, natural-language explanation.
 
 Use the supplied candidate details only when relevant.
 Never invent personal project experience.
@@ -236,13 +236,11 @@ async function generateAnswer(prompt, mode) {
   return result;
 }
 
-async function streamAnswer(prompt, mode, req, res) {
+async function streamAnswer(prompt, mode, res) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
-
   const controller = new AbortController();
   res.on("close", () => { if (!res.writableEnded) controller.abort(); });
-
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?alt=sse`;
   const upstream = await fetch(url, {
     method: "POST",
@@ -254,43 +252,39 @@ async function streamAnswer(prompt, mode, req, res) {
     }),
     signal: controller.signal
   });
-
   if (!upstream.ok) {
     const details = await upstream.text();
     throw new Error(`Gemini API error (${upstream.status}): ${details.slice(0, 500)}`);
   }
-
+  if (!upstream.body) throw new Error("Gemini returned an empty streaming response.");
   res.status(200);
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders?.();
-
   const reader = upstream.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  const processFrame = (frame) => {
+    const data = frame.split(/\r?\n/).filter(line => line.startsWith("data:"))
+      .map(line => line.slice(5).trim()).join("\n");
+    if (!data || data === "[DONE]") return;
+    const event = JSON.parse(data);
+    if (event.error) throw new Error(event.error.message || "Gemini streaming failed.");
+    const chunk = event.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
+    if (chunk && !res.writableEnded) res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+  };
   try {
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        if (!line.startsWith("data:")) continue;
-        const raw = line.slice(5).trim();
-        if (!raw || raw === "[DONE]") continue;
-        try {
-          const event = JSON.parse(raw);
-          const chunk = event.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("");
-          if (chunk && !res.writableEnded) res.write(`data: ${JSON.stringify({ text: chunk })}\\n\\n`);
-          if (event.error) throw new Error(event.error.message || "Gemini streaming failed.");
-        } catch (error) {
-          if (error instanceof SyntaxError) continue;
-          throw error;
-        }
-      }
+      const frames = buffer.split(/\r?\n\r?\n/);
+      buffer = frames.pop() || "";
+      for (const frame of frames) if (frame.trim()) processFrame(frame);
     }
+    buffer += decoder.decode();
+    if (buffer.trim()) processFrame(buffer);
     if (!res.writableEnded) res.end();
   } finally {
     reader.releaseLock();
@@ -330,7 +324,7 @@ async function handler(req, res) {
       });
     }
 
-    const prompt = buildPrompt(body);
+    const prompt = buildPrompt(body);\n\n    if (body.stream === true) {\n      await streamAnswer(prompt, mode, res);\n      return;\n    }
 
     const result = await generateAnswer(prompt, mode);
 
@@ -339,7 +333,7 @@ async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("Gemini AI Coach error:", error);
+    console.error("Gemini AI Coach error:", error);\n\n    if (res.headersSent) {\n      if (!res.writableEnded) {\n        res.write("data: " + JSON.stringify({ error: error.message || "Streaming failed." }) + "\\n\\n");\n        res.end();\n      }\n      return;\n    }
 
     return res.status(500).json({
       error:
