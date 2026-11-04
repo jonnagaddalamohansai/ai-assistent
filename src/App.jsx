@@ -111,7 +111,8 @@ export default function App() {
   const [sessionMode, setSessionMode] = useState("");
   const [syncStatus, setSyncStatus] = useState("Not connected");
   const syncSocketRef = useRef(null);
-  const answerSectionRef = useRef(null);\n  const lastScrolledQuestionRef = useRef("");
+  const answerSectionRef = useRef(null);
+  const lastScrolledQuestionRef = useRef("");
 
   // Bring the newest suggested answer into view automatically.
   useEffect(() => {
