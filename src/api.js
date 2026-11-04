@@ -23,27 +23,29 @@ export async function callApi(payload, options = {}) {
   let buffer = "";
   let fullText = "";
 
+  const processEvent = (frame) => {
+    const lines = frame.split(/\r?\n/)
+      .filter(line => line.startsWith("data:"))
+      .map(line => line.slice(5).trim());
+    if (!lines.length) return;
+    const data = JSON.parse(lines.join("\n"));
+    if (data.error) throw new Error(data.error);
+    if (data.text) {
+      fullText += data.text;
+      options.onChunk(data.text);
+    }
+  };
+
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split("\\n\\n");
+    const events = buffer.split(/\r?\n\r?\n/);
     buffer = events.pop() || "";
-
-    for (const event of events) {
-      for (const line of event.split("\\n")) {
-        if (!line.startsWith("data:")) continue;
-        const raw = line.slice(5).trim();
-        if (!raw) continue;
-        const data = JSON.parse(raw);
-        if (data.error) throw new Error(data.error);
-        if (data.text) {
-          fullText += data.text;
-          options.onChunk(data.text);
-        }
-      }
-    }
+    for (const event of events) if (event.trim()) processEvent(event);
   }
 
+  buffer += decoder.decode();
+  if (buffer.trim()) processEvent(buffer);
   return fullText;
 }
