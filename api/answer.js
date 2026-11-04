@@ -132,7 +132,7 @@ function buildPrompt(body) {
     `JOB DESCRIPTION:\n${fromStart(body.jobDescription, 1800) || "Not supplied"}`,
     `PREVIOUS INTERVIEWER QUESTION: ${fromEnd(body.previousQuestion, 900) || "None"}`,
     `PREVIOUS SUGGESTED ANSWER: ${fromEnd(body.answer, 1000) || "None"}`,
-    `RECENT TRANSCRIPT (newest text preserved):\n${fromEnd(transcript, 1800) || "None"}`,
+    `RECENT TRANSCRIPT (newest text preserved; use to resolve fragments and speech-recognition errors):\n${fromEnd(transcript, 3000) || "None"}`,
     `CURRENT INTERVIEWER QUESTION: ${fromEnd(question, 1200) || "Not supplied"}`,
     personalQuestion ? personalQuestionGuidance(question) : "",
     personalQuestion
