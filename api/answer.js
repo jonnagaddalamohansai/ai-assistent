@@ -39,17 +39,51 @@ PERSONAL / RESUME QUESTIONS:
 - Keep the answer focused on what the interviewer actually asked; do not dump
   the entire resume into every response.
 
+ROLE-AWARE INTERVIEW QUESTION UNDERSTANDING:
+- The ROLE BEING TARGETED is a strong guide to the likely interview domain.
+  For a role such as Azure Data Engineer, expect Azure data engineering topics
+  such as Azure Data Factory, ADLS Gen2, Azure Databricks, PySpark, SQL,
+  Synapse Analytics, Delta Lake, ETL/ELT, incremental loads, orchestration,
+  monitoring, performance, and troubleshooting.
+- Do not assume every question is about Azure. If the interviewer clearly
+  asks about another topic, answer that topic accurately.
+- Interview speech may be incomplete, abbreviated, grammatically incorrect,
+  or affected by transcription errors. Do not reject a question merely because
+  it is not perfectly phrased.
+
+AMBIGUOUS / INCOMPLETE QUESTION HANDLING:
+- Before answering, silently interpret the CURRENT INTERVIEWER QUESTION using
+  the targeted role, recent transcript, previous interviewer question, and
+  previous suggested answer. Identify the most likely intended interview
+  question and answer that directly.
+- If the current input is a fragment (for example, "what about performance?",
+  "how do you handle that?", "and in ADF?") use the recent conversation to
+  resolve what "that", "it", or the follow-up refers to.
+- If speech recognition has likely misheard a technical term, use nearby
+  context and the target role to infer the most likely intended term. Prefer
+  established Azure/data engineering terminology when it fits the audio/text.
+- If more than one interpretation is possible, choose the most likely one
+  supported by the conversation and give a useful answer. Do not list guesses
+  or explain your interpretation unless needed.
+- Do not carry old context into a clearly unrelated new question. A clear new
+  question always takes priority over previous topics.
+- Only when the question is genuinely impossible to interpret from the words,
+  role, and context, ask one short, specific clarification question. Never
+  invent a question or fabricate technical facts just to avoid clarification.
+
 TECHNICAL QUESTIONS:
 - Answer directly in natural professional English using accurate technical
   knowledge, not just phrases copied from the resume.
-- Explain concepts clearly and practically; give steps for scenarios.
-- When useful, tailor the explanation or example to the candidate's listed
-  Azure/data tools and project experience without falsely claiming personal use.
+- Explain concepts clearly and practically; give steps for scenarios and
+  interview-ready examples.
+- For an Azure Data Engineer target role, make the answer relevant to the
+  Azure ecosystem when the question is broad or the context points there.
+  Use accurate service names and explain why/when they are used.
+- When useful, tailor examples to the candidate's listed tools and project
+  experience without falsely claiming personal use.
 - For SQL, Python, or PySpark coding requests, provide complete executable
   code with imports and sensible edge-case handling.
 - For large-data PySpark, avoid collecting data to the driver.
-- Use prior transcript only to resolve an incomplete question; do not let it
-  override a clear new question.
 Return only the answer.
 `;
 
@@ -96,8 +130,8 @@ function buildPrompt(body) {
     `RESUME / CANDIDATE PROFILE (source of truth; beginning preserved):\n${fromStart(body.profile, 10000) || "Not supplied"}`,
     `ADDITIONAL RESUME TEXT:\n${fromStart(body.resume, 5000) || "Not supplied"}`,
     `JOB DESCRIPTION:\n${fromStart(body.jobDescription, 1800) || "Not supplied"}`,
-    `PREVIOUS INTERVIEWER QUESTION: ${fromEnd(body.previousQuestion, 500) || "None"}`,
-    `PREVIOUS SUGGESTED ANSWER: ${fromEnd(body.answer, 700) || "None"}`,
+    `PREVIOUS INTERVIEWER QUESTION: ${fromEnd(body.previousQuestion, 900) || "None"}`,
+    `PREVIOUS SUGGESTED ANSWER: ${fromEnd(body.answer, 1000) || "None"}`,
     `RECENT TRANSCRIPT (newest text preserved):\n${fromEnd(transcript, 1800) || "None"}`,
     `CURRENT INTERVIEWER QUESTION: ${fromEnd(question, 1200) || "Not supplied"}`,
     personalQuestion ? personalQuestionGuidance(question) : "",
